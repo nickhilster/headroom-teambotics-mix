@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+import os
 
 import click
 
@@ -159,6 +160,12 @@ def _reject_task_lifecycle(manifest: DeploymentManifest, action: str) -> None:
 @click.option("--memory", is_flag=True, help="Enable persistent memory in the proxy runtime.")
 @click.option("--no-telemetry", is_flag=True, help="Disable anonymous telemetry in the runtime.")
 @click.option(
+    "--dashboard-shortcuts/--no-dashboard-shortcuts",
+    default=True,
+    show_default=True,
+    help="Create Desktop and Start Menu launchers for the Headroom dashboard after install.",
+)
+@click.option(
     "--image",
     default="ghcr.io/chopratejas/headroom:latest",
     show_default=True,
@@ -178,6 +185,7 @@ def install_apply(
     proxy_mode: str,
     memory: bool,
     no_telemetry: bool,
+    dashboard_shortcuts: bool,
     image: str,
 ) -> None:
     """Install a persistent Headroom deployment."""
@@ -226,6 +234,17 @@ def install_apply(
     click.echo(f"Health: {manifest.health_url}")
     if manifest.targets:
         click.echo(f"Targets: {', '.join(manifest.targets)}")
+    if dashboard_shortcuts:
+        if os.name != "nt":
+            click.echo("Dashboard shortcut creation is currently supported on Windows only; skipping.")
+        else:
+            from .proxy import create_dashboard_shortcuts
+
+            created = create_dashboard_shortcuts("127.0.0.1", port)
+            if "desktop" in created:
+                click.echo(f"Desktop shortcut: {created['desktop']}")
+            if "start_menu" in created:
+                click.echo(f"Start Menu shortcut: {created['start_menu']}")
 
 
 @install.command("status")

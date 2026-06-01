@@ -1,0 +1,90 @@
+<h2>Design · Section 3: Docs information architecture</h2>
+<p class="subtitle">How the two tracks connect to the rest of the docs — and what changes in the nav.</p>
+
+<div class="section">
+  <h3>Current nav (problem)</h3>
+  <div class="mockup">
+    <div class="mockup-header">Docs sidebar — today (flat list)</div>
+    <div class="mockup-body" style="font-size:0.82rem;line-height:1.8;color:#94a3b8">
+      Introduction · Quickstart · Installation · Proxy Server · How Compression Works ·
+      Configuration · Architecture · CCR · SmartCrusher · CodeCompressor · Cache Optimization ·
+      Memory · Shared Context · Failure Learning · MCP · LangChain · Agno · Strands ·
+      Vercel AI SDK · Anthropic SDK · OpenAI SDK · LiteLLM · Context Management ·
+      Image Compression · Benchmarks · Metrics · Simulation · Troubleshooting · Errors …<br><br>
+      <span style="color:#f87171">→ 35+ pages, flat. A new user has no signal about where to start or what's relevant to them.</span>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>Proposed nav — grouped with persona anchors</h3>
+  <div class="split">
+    <div class="mockup">
+      <div class="mockup-header">Sidebar — proposed</div>
+      <div class="mockup-body" style="font-size:0.82rem;line-height:1.9">
+        <b>Get Started</b><br>
+        &nbsp;&nbsp;<span style="color:#6ee7b7">→ Quickstart</span> <span style="color:#94a3b8">(role selector lives here)</span><br>
+        &nbsp;&nbsp;&nbsp;&nbsp;Installation<br><br>
+
+        <b>Agent Users</b> <span style="color:#94a3b8" style="font-size:0.75rem">← new group</span><br>
+        &nbsp;&nbsp;&nbsp;&nbsp;Wrap an agent<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;Persistent install<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;Failure learning<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;Cross-agent memory<br><br>
+
+        <b>App Builders</b> <span style="color:#94a3b8">← new group</span><br>
+        &nbsp;&nbsp;&nbsp;&nbsp;Python library<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;TypeScript SDK<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;Proxy server<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;Framework integrations<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#94a3b8">LangChain · Agno · Vercel AI SDK …</span><br><br>
+
+        <b>How It Works</b><br>
+        &nbsp;&nbsp;&nbsp;&nbsp;Architecture · CCR · SmartCrusher …<br><br>
+
+        <b>Reference</b><br>
+        &nbsp;&nbsp;&nbsp;&nbsp;Configuration · API · Benchmarks …
+      </div>
+    </div>
+    <div class="mockup">
+      <div class="mockup-header">What changes (and what doesn't)</div>
+      <div class="mockup-body" style="font-size:0.82rem;line-height:1.9">
+        <b style="color:#6ee7b7">Changes</b><br>
+        · Quickstart restructured (Section 1)<br>
+        · Sidebar grouped into 5 sections<br>
+        · "Wrap an agent" page created or promoted<br>
+        · Proxy page moves under App Builders<br>
+        · Persistent installs moves under Agent Users<br>
+        · Failure learning (headroom learn) made more prominent<br><br>
+
+        <b style="color:#94a3b8">Stays the same</b><br>
+        · All existing page content preserved<br>
+        · No pages deleted — just reorganized<br>
+        · Deep reference pages unchanged<br>
+        · URLs can stay stable (or redirect)<br><br>
+
+        <b>New: track-aware "next steps"</b><br>
+        · Each quickstart track ends with 3 curated links<br>
+        · Agent Users → learn / memory / persistent<br>
+        · App Builders → proxy / SDK wrappers / config
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>headroom learn — surface it earlier</h3>
+  <div class="mockup">
+    <div class="mockup-header">Current: buried. Proposed: in the Agent User flow</div>
+    <div class="mockup-body" style="font-size:0.82rem;line-height:1.8">
+      <b>Today:</b> "Failure Learning" page exists but is not linked from quickstart or wrap docs.<br>
+      Users discover it only if they scan the full sidebar.<br><br>
+      <b>Proposed:</b><br>
+      · Session-end banner nudges: <span style="font-family:monospace;color:#6ee7b7">Run `headroom learn` to extract lessons from this session.</span><br>
+      · Agent User next-steps card links to it directly<br>
+      · Sidebar places it under Agent Users (not buried in flat list)
+    </div>
+  </div>
+</div>
+
+<p class="subtitle">Does Section 3 look right? Reply in terminal — this completes the design. I'll then write the spec doc.</p>

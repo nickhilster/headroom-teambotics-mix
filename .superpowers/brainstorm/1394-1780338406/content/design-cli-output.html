@@ -1,0 +1,77 @@
+<h2>Design · Section 2: CLI savings output</h2>
+<p class="subtitle">The aha moment for the Agent User track lives here — what the terminal shows on first compression.</p>
+
+<div class="section">
+  <h3>Current state (problem)</h3>
+  <div class="mockup">
+    <div class="mockup-header">$ headroom wrap claude — today</div>
+    <div class="mockup-body" style="font-family:monospace;font-size:0.82rem;line-height:1.8;color:#94a3b8">
+      Starting proxy on :8787…<br>
+      Launching claude…<br>
+      <span style="color:#475569">[session runs silently — savings only visible via `headroom stats` after the fact]</span>
+    </div>
+  </div>
+  <p style="font-size:0.85rem;color:#f87171;margin-top:0.5rem">→ User has no idea if Headroom is doing anything. Value is invisible during the session.</p>
+</div>
+
+<div class="section">
+  <h3>Proposed: inline savings banner on first compression</h3>
+  <div class="mockup">
+    <div class="mockup-header">$ headroom wrap claude — proposed</div>
+    <div class="mockup-body" style="font-family:monospace;font-size:0.82rem;line-height:1.8">
+      <span style="color:#6ee7b7">✓</span> Headroom proxy running on :8787<br>
+      <span style="color:#6ee7b7">✓</span> Claude Code wired — compression active<br>
+      <span style="color:#94a3b8">  Tip: run `headroom stats` anytime to see savings<br></span>
+      <br>
+      <span style="color:#475569">[claude session starts normally…]</span><br>
+      <br>
+      <span style="color:#6ee7b7">━━━ Headroom ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</span><br>
+      <span style="color:#6ee7b7">▶</span> First compression: <b>17,765 → 1,408 tokens</b> &nbsp;<b style="color:#6ee7b7">92% saved</b><br>
+      &nbsp;&nbsp;Transforms: SmartCrusher · CacheAligner<br>
+      &nbsp;&nbsp;<span style="color:#94a3b8">≈ $0.048 saved · session total so far: $0.048</span><br>
+      <span style="color:#6ee7b7">━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</span><br>
+      <br>
+      <span style="color:#475569">[subsequent compressions: silent — banner only on first per session]</span>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>Session-end summary (always shown)</h3>
+  <div class="mockup">
+    <div class="mockup-header">When the wrapped session exits</div>
+    <div class="mockup-body" style="font-family:monospace;font-size:0.82rem;line-height:1.8">
+      <span style="color:#6ee7b7">━━━ Headroom session summary ━━━━━━━━━━━━━━━━━━━━</span><br>
+      &nbsp;Compressions: <b>24</b> &nbsp;·&nbsp; Tokens saved: <b>141,230</b> &nbsp;·&nbsp; Cost saved: <b>≈ $0.42</b><br>
+      &nbsp;Run `headroom learn` to extract lessons from this session.<br>
+      <span style="color:#6ee7b7">━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</span>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>App Builder equivalent: compress() return value</h3>
+  <div class="mockup">
+    <div class="mockup-header">Python — first compress() call</div>
+    <div class="mockup-body" style="font-family:monospace;font-size:0.82rem;line-height:1.8">
+      result = compress(messages, model="gpt-4o")<br>
+      <span style="color:#94a3b8"># result already has .tokens_before / .tokens_after / .tokens_saved</span><br>
+      <span style="color:#94a3b8"># Quickstart step 3 just prints these — no extra work needed</span><br>
+      print(f"Saved {result.tokens_saved} tokens ({result.compression_ratio:.0%})")
+    </div>
+  </div>
+  <p style="font-size:0.85rem;color:#94a3b8;margin-top:0.5rem">→ No CLI change needed for the App Builder track — the data is already on the result object. The quickstart just needs to show it at step 3 rather than step 4.</p>
+</div>
+
+<div class="section">
+  <h3>Design rules</h3>
+  <ul style="font-size:0.9rem;line-height:1.8">
+    <li><b>Banner fires once per session</b> — on first compression only, not every call (avoids noise)</li>
+    <li><b>Session-end summary is always shown</b> — gives the cumulative picture when the session ends</li>
+    <li><b>Silent after first banner</b> — subsequent compressions don't print anything; agent output is not polluted</li>
+    <li><b>Cost estimate is opt-in friendly</b> — shown by default, suppressible via config if users don't want it</li>
+    <li><b>headroom learn nudge</b> at session end — surfaces the feature without requiring users to discover it separately</li>
+  </ul>
+</div>
+
+<p class="subtitle">Does Section 2 look right? Reply in terminal — then we'll cover Section 3 (information architecture of the docs).</p>

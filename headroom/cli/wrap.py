@@ -23,6 +23,7 @@ import socket
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 from collections.abc import Callable
 from pathlib import Path
@@ -1013,7 +1014,8 @@ def _run_proxy_only_watcher(
     through here. ``_launch_tool`` owns the proxy lifecycle on that path.
     """
     proxy_holder: list[subprocess.Popen | None] = [None]
-    cleanup = _make_cleanup(proxy_holder, port)
+    session_monitor = _SessionOutputMonitor(port)
+    cleanup = _make_cleanup(proxy_holder, port, session_monitor=session_monitor)
     signal.signal(signal.SIGINT, cleanup)
     signal.signal(signal.SIGTERM, cleanup)
 
@@ -1022,6 +1024,7 @@ def _run_proxy_only_watcher(
         proxy_holder[0] = _ensure_proxy(
             port, no_proxy, learn=learn, memory=memory, agent_type=agent_type
         )
+        session_monitor.start()
         click.echo()
         print_setup_lines()
         click.echo()
@@ -1315,6 +1318,286 @@ def _query_proxy_health(port: int) -> dict[str, Any] | None:
     except (OSError, urllib.error.URLError, ValueError, json.JSONDecodeError):
         return None
     return payload if isinstance(payload, dict) else None
+
+
+def _query_proxy_stats(port: int, *, cached: bool = False) -> dict[str, Any] | None:
+    """Query the running proxy's /stats payload."""
+    import urllib.error
+    import urllib.request
+
+    suffix = "?cached=1" if cached else ""
+    url = f"http://127.0.0.1:{port}/stats{suffix}"
+    try:
+        with urllib.request.urlopen(url, timeout=2) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except (OSError, urllib.error.URLError, ValueError, json.JSONDecodeError):
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
+def _session_output_cost_enabled() -> bool:
+    """Return True when CLI session output should include approximate USD savings."""
+    raw = os.environ.get("HEADROOM_SESSION_COST_ESTIMATE")
+    if raw is None:
+        return True
+    return raw.strip().lower() not in {"0", "false", "no", "off"}
+
+
+def _session_int(value: Any) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _session_float(value: Any) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _session_baseline(stats: dict[str, Any] | None) -> dict[str, float | int]:
+    """Capture baseline counters so wrap-scoped output can use deltas."""
+    if not isinstance(stats, dict):
+        return {"requests": 0, "tokens_saved": 0, "cost_saved": 0.0}
+
+    requests = stats.get("requests") if isinstance(stats.get("requests"), dict) else {}
+    tokens = stats.get("tokens") if isinstance(stats.get("tokens"), dict) else {}
+    cost = stats.get("cost") if isinstance(stats.get("cost"), dict) else {}
+    return {
+        "requests": _session_int(requests.get("total")),
+        "tokens_saved": _session_int(tokens.get("proxy_compression_saved", tokens.get("saved"))),
+        "cost_saved": _session_float(
+            cost.get("compression_savings_usd", cost.get("savings_usd", 0.0))
+        ),
+    }
+
+
+def _format_usd_approx(value: float) -> str:
+    """Format a compact approximate USD amount for session banners."""
+    if value <= 0:
+        return "$0.00"
+    if value < 0.1:
+        return f"${value:.3f}"
+    return f"${value:.2f}"
+
+
+def _friendly_transform_name(transform: str) -> str | None:
+    """Convert internal transform identifiers into readable banner labels."""
+    parts = [part for part in str(transform).replace("-", "_").split(":") if part]
+    if not parts:
+        return None
+
+    candidate = ""
+    for part in reversed(parts):
+        normalized = part.strip().lower()
+        if not normalized or normalized in {
+            "router",
+            "tool_result",
+            "text_block",
+            "tool",
+            "message",
+            "noop",
+            "excluded",
+            "protected",
+            "fallback",
+            "error",
+        }:
+            continue
+        try:
+            float(normalized)
+            continue
+        except ValueError:
+            candidate = normalized
+            break
+
+    if not candidate:
+        return None
+
+    mapping = {
+        "smart_crusher": "SmartCrusher",
+        "cache_aligner": "CacheAligner",
+        "code_aware": "CodeAware",
+        "code_compressor": "CodeCompressor",
+        "search_compressor": "SearchCompressor",
+        "log_compressor": "LogCompressor",
+        "semantic_cache_hit": "SemanticCache",
+        "kompress": "Kompress",
+    }
+    if candidate in mapping:
+        return mapping[candidate]
+
+    words = [word for word in candidate.split("_") if word]
+    if not words:
+        return None
+    return "".join(word.capitalize() for word in words)
+
+
+def _recent_compression_entry(stats: dict[str, Any]) -> dict[str, Any] | None:
+    """Return the newest recent-request entry that actually saved tokens."""
+    recent_requests = stats.get("recent_requests")
+    if not isinstance(recent_requests, list):
+        return None
+    for entry in reversed(recent_requests):
+        if not isinstance(entry, dict):
+            continue
+        if _session_int(entry.get("tokens_saved")) > 0:
+            return entry
+    return None
+
+
+def _build_first_compression_lines(
+    stats: dict[str, Any],
+    baseline: dict[str, float | int],
+) -> list[str] | None:
+    """Build the first-compression banner from current proxy stats."""
+    tokens = stats.get("tokens") if isinstance(stats.get("tokens"), dict) else {}
+    current_total_saved = _session_int(
+        tokens.get("proxy_compression_saved", tokens.get("saved"))
+    )
+    baseline_saved = _session_int(baseline.get("tokens_saved"))
+    if current_total_saved <= baseline_saved:
+        return None
+
+    entry = _recent_compression_entry(stats)
+    if entry is None:
+        return None
+
+    tokens_before = _session_int(entry.get("input_tokens_original"))
+    tokens_after = _session_int(entry.get("input_tokens_optimized"))
+    tokens_saved = _session_int(entry.get("tokens_saved"))
+    if tokens_saved <= 0 or tokens_before <= 0:
+        return None
+
+    savings_pct = _session_float(entry.get("savings_percent"))
+    if savings_pct <= 0:
+        savings_pct = (tokens_saved / tokens_before) * 100 if tokens_before else 0.0
+
+    transforms_raw = entry.get("transforms_applied")
+    transforms: list[str] = []
+    if isinstance(transforms_raw, list):
+        seen: set[str] = set()
+        for item in transforms_raw:
+            friendly = _friendly_transform_name(str(item))
+            if friendly and friendly not in seen:
+                seen.add(friendly)
+                transforms.append(friendly)
+
+    cost = stats.get("cost") if isinstance(stats.get("cost"), dict) else {}
+    current_cost_saved = _session_float(
+        cost.get("compression_savings_usd", cost.get("savings_usd", 0.0))
+    )
+    baseline_cost_saved = _session_float(baseline.get("cost_saved"))
+    session_cost_saved = max(current_cost_saved - baseline_cost_saved, 0.0)
+
+    lines = [
+        "  ━━━ Headroom ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+        (
+            f"  ▶ First compression: {tokens_before:,} → {tokens_after:,} tokens  "
+            f"{round(savings_pct):.0f}% saved"
+        ),
+    ]
+    if transforms:
+        lines.append(f"    Transforms: {' · '.join(transforms[:3])}")
+    if _session_output_cost_enabled():
+        pretty_cost = _format_usd_approx(session_cost_saved)
+        lines.append(f"    ≈ {pretty_cost} saved this session")
+    lines.append("  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+    return lines
+
+
+def _build_session_summary_lines(
+    stats: dict[str, Any],
+    baseline: dict[str, float | int],
+) -> list[str]:
+    """Build the session-end summary block from current proxy stats."""
+    requests = stats.get("requests") if isinstance(stats.get("requests"), dict) else {}
+    tokens = stats.get("tokens") if isinstance(stats.get("tokens"), dict) else {}
+    cost = stats.get("cost") if isinstance(stats.get("cost"), dict) else {}
+
+    delta_requests = max(
+        _session_int(requests.get("total")) - _session_int(baseline.get("requests")),
+        0,
+    )
+    delta_saved = max(
+        _session_int(tokens.get("proxy_compression_saved", tokens.get("saved")))
+        - _session_int(baseline.get("tokens_saved")),
+        0,
+    )
+    delta_cost = max(
+        _session_float(cost.get("compression_savings_usd", cost.get("savings_usd", 0.0)))
+        - _session_float(baseline.get("cost_saved")),
+        0.0,
+    )
+
+    summary_line = f"   Compressions: {delta_requests:,}  ·  Tokens saved: {delta_saved:,}"
+    if _session_output_cost_enabled():
+        summary_line += f"  ·  Cost saved: ≈ {_format_usd_approx(delta_cost)}"
+
+    return [
+        "  ━━━ Headroom session summary ━━━━━━━━━━━━━━━━━━━━",
+        summary_line,
+        "   Run `headroom learn` to extract lessons from this session.",
+        "  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+    ]
+
+
+class _SessionOutputMonitor:
+    """Poll proxy stats to surface first-savings and end-of-session output."""
+
+    def __init__(self, port: int) -> None:
+        self.port = port
+        self.baseline = _session_baseline(_query_proxy_stats(port))
+        self._stop_event = threading.Event()
+        self._thread: threading.Thread | None = None
+        self._banner_emitted = False
+        self._summary_emitted = False
+        self._lock = threading.Lock()
+
+    def start(self) -> None:
+        if self._thread is not None:
+            return
+        self._thread = threading.Thread(target=self._run, name="headroom-session-output", daemon=True)
+        self._thread.start()
+
+    def stop(self) -> None:
+        self._stop_event.set()
+        if self._thread is not None:
+            self._thread.join(timeout=1.0)
+            self._thread = None
+
+    def emit_summary(self) -> None:
+        with self._lock:
+            if self._summary_emitted:
+                return
+            stats = _query_proxy_stats(self.port)
+            if not isinstance(stats, dict):
+                return
+            click.echo()
+            for line in _build_session_summary_lines(stats, self.baseline):
+                click.echo(line)
+            click.echo()
+            self._summary_emitted = True
+
+    def _run(self) -> None:
+        while not self._stop_event.wait(1.0):
+            if self._banner_emitted:
+                continue
+            stats = _query_proxy_stats(self.port)
+            if not isinstance(stats, dict):
+                continue
+            lines = _build_first_compression_lines(stats, self.baseline)
+            if not lines:
+                continue
+            with self._lock:
+                if self._banner_emitted:
+                    continue
+                click.echo()
+                for line in lines:
+                    click.echo(line)
+                click.echo()
+                self._banner_emitted = True
 
 
 def _proxy_health_config(payload: dict[str, Any] | None) -> dict[str, Any] | None:
@@ -1731,7 +2014,11 @@ def _ensure_proxy(
         return None
 
 
-def _make_cleanup(proxy_proc_holder: list, port: int = 8787) -> Any:
+def _make_cleanup(
+    proxy_proc_holder: list,
+    port: int = 8787,
+    session_monitor: _SessionOutputMonitor | None = None,
+) -> Any:
     """Create a cleanup function that terminates the proxy on exit.
 
     Only kills the proxy if no other headroom-wrapped clients are using it.
@@ -1756,6 +2043,9 @@ def _make_cleanup(proxy_proc_holder: list, port: int = 8787) -> Any:
             return False  # If we can't check, assume no others
 
     def cleanup(signum: int | None = None, frame: Any = None) -> None:
+        if session_monitor is not None:
+            session_monitor.stop()
+            session_monitor.emit_summary()
         proc = proxy_proc_holder[0] if proxy_proc_holder else None
         if proc and proc.poll() is None:
             if _other_clients_exist():
@@ -1796,7 +2086,8 @@ def _launch_tool(
 ) -> None:
     """Common logic: start proxy, launch tool, clean up."""
     proxy_holder: list[subprocess.Popen | None] = [None]
-    cleanup = _make_cleanup(proxy_holder, port)
+    session_monitor = _SessionOutputMonitor(port)
+    cleanup = _make_cleanup(proxy_holder, port, session_monitor=session_monitor)
     signal.signal(signal.SIGINT, _ignore_child_sigint)
     signal.signal(signal.SIGTERM, cleanup)
 
@@ -1820,6 +2111,7 @@ def _launch_tool(
             region=region,
             openai_api_url=openai_api_url,
         )
+        session_monitor.start()
 
         if code_graph:
             _setup_code_graph(verbose=False)
@@ -2151,7 +2443,8 @@ def claude(
 
     # Setup rtk before launching (Claude-specific)
     proxy_holder: list[subprocess.Popen | None] = [None]
-    cleanup = _make_cleanup(proxy_holder, port)
+    session_monitor = _SessionOutputMonitor(port)
+    cleanup = _make_cleanup(proxy_holder, port, session_monitor=session_monitor)
     signal.signal(signal.SIGINT, _ignore_child_sigint)
     signal.signal(signal.SIGTERM, cleanup)
 
@@ -2207,6 +2500,7 @@ def claude(
         proxy_holder[0] = _ensure_proxy(
             port, no_proxy, learn=learn, memory=memory, agent_type="claude", code_graph=code_graph
         )
+        session_monitor.start()
 
         if not no_rtk:
             if _selected_context_tool() == _CONTEXT_TOOL_LEAN_CTX:

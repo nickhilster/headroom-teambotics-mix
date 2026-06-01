@@ -1,0 +1,74 @@
+<h2>Three approaches to the onboarding redesign</h2>
+<p class="subtitle">Each combines branched paths + real-time feedback differently. Pick the one that feels right — or we'll use your input to blend.</p>
+
+<div class="options">
+  <div class="option" data-choice="docs-split" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Docs-first path splitter <span style="font-size:0.75rem;font-weight:400;color:#94a3b8">(recommended)</span></h3>
+      <p>The quickstart page opens with a visible role selector. Two tight tracks — Agent User and App Builder — each 3 steps, no detours. Real-time savings output is baked into <code>wrap</code> and <code>proxy</code> so the win is unavoidable.</p>
+      <div class="mockup" style="margin-top:0.75rem">
+        <div class="mockup-header">Quickstart — top of page</div>
+        <div class="mockup-body" style="font-size:0.82rem;line-height:1.7">
+          <b>I want to…</b><br>
+          &nbsp;[&nbsp;<b>Save tokens on my Claude Code / Cursor sessions</b>&nbsp;]&nbsp;&nbsp;[&nbsp;Add compression to my app&nbsp;]<br><br>
+          <b>1. Install</b> · <b>2. Wrap your agent</b> · <b>3. See savings inline ↓</b><br><br>
+          <span style="color:#6ee7b7">▶ Headroom</span> 17,765 → 1,408 tokens &nbsp;<b style="color:#6ee7b7">92% saved</b><br>
+          <span style="color:#94a3b8">&nbsp;&nbsp;SmartCrusher · CacheAligner · ≈ $0.048 saved</span>
+        </div>
+      </div>
+      <div class="pros-cons" style="margin-top:0.75rem">
+        <div class="pros"><h4>Strengths</h4><ul><li>Low implementation risk</li><li>Works for both personas</li><li>Docs-level change, no CLI rework</li></ul></div>
+        <div class="cons"><h4>Tradeoffs</h4><ul><li>Users must read docs to branch</li><li>Requires CLI savings output changes</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="cli-wizard" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>CLI-first interactive init</h3>
+      <p><code>headroom init</code> becomes the onboarding. It asks one question ("what agent do you use?"), wires up the right mode, and immediately runs a live compression demo — all before the user touches docs.</p>
+      <div class="mockup" style="margin-top:0.75rem">
+        <div class="mockup-header">$ headroom init</div>
+        <div class="mockup-body" style="font-family:monospace;font-size:0.82rem;line-height:1.7">
+          <span style="color:#6ee7b7">?</span> What do you use? &nbsp;› Claude Code<br>
+          <span style="color:#6ee7b7">✓</span> Proxy started on :8787<br>
+          <span style="color:#6ee7b7">✓</span> Claude Code wired<br>
+          <span style="color:#6ee7b7">▶</span> Quick demo — compressing 50 search results…<br>
+          &nbsp;&nbsp;14,200 → 1,136 tokens &nbsp;<b style="color:#6ee7b7">92% saved</b><br>
+          <span style="color:#94a3b8">You're set. Run: headroom wrap claude</span>
+        </div>
+      </div>
+      <div class="pros-cons" style="margin-top:0.75rem">
+        <div class="pros"><h4>Strengths</h4><ul><li>Aha moment happens in the terminal</li><li>No docs required to succeed</li><li>Strong for power users</li></ul></div>
+        <div class="cons"><h4>Tradeoffs</h4><ul><li>CLI rework is deeper</li><li>App builders may still need docs</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="demo-first" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Demo-first docs</h3>
+      <p>Quickstart leads with an embedded live playground — compress a real example in the browser, no install needed. Users see the aha moment before committing. Path selection happens after they're already convinced.</p>
+      <div class="mockup" style="margin-top:0.75rem">
+        <div class="mockup-header">Quickstart — above the fold</div>
+        <div class="mockup-body" style="font-size:0.82rem;line-height:1.7">
+          <b>See it in 10 seconds — no install needed</b><br>
+          <span style="background:#1e293b;padding:2px 6px;border-radius:3px;font-family:monospace">[ Run demo ▶ ]</span>&nbsp;&nbsp;
+          <span style="color:#94a3b8">← live compression, right here</span><br><br>
+          65,000 tokens → 5,100 tokens &nbsp;<b style="color:#6ee7b7">92% saved</b><br>
+          <span style="color:#94a3b8">Same answers. Zero accuracy loss.</span><br><br>
+          <b>Ready to save your tokens? Choose your path ↓</b>
+        </div>
+      </div>
+      <div class="pros-cons" style="margin-top:0.75rem">
+        <div class="pros"><h4>Strengths</h4><ul><li>Converts skeptics before install</li><li>No friction to aha moment</li><li>Works well as a landing page too</li></ul></div>
+        <div class="cons"><h4>Tradeoffs</h4><ul><li>Requires building a browser playground</li><li>Highest implementation effort</li></ul></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<p class="subtitle" style="margin-top:1.5rem">http://localhost:57284 — click your preferred direction, then reply in terminal.</p>

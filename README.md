@@ -98,6 +98,8 @@ headroom proxy --port 8787              # drop-in proxy, zero code changes
 headroom stats
 ```
 
+On Windows, `headroom init` and `headroom install apply` now create Headroom Dashboard launchers in the Desktop and Start Menu by default. Use `--no-dashboard-shortcuts` to skip that behavior.
+
 Granular extras: `[proxy]`, `[mcp]`, `[ml]`, `[agno]`, `[langchain]`, `[evals]`. Requires **Python 3.10+**.
 
 ## Proof

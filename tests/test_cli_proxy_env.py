@@ -26,6 +26,34 @@ def runner():
 class TestCLIProxyEnvVars:
     """Test that the CLI proxy command reads API URL env vars."""
 
+    def test_proxy_starts_and_stops_session_monitor(self, runner):
+        monitor_calls = []
+
+        class FakeMonitor:
+            def __init__(self, port):
+                assert port == 8787
+
+            def start(self):
+                monitor_calls.append("start")
+
+            def stop(self):
+                monitor_calls.append("stop")
+
+            def emit_summary(self):
+                monitor_calls.append("summary")
+
+        def mock_run_server(config, **kwargs):
+            return None
+
+        with (
+            patch("headroom.cli.proxy._SessionOutputMonitor", FakeMonitor),
+            patch("headroom.proxy.server.run_server", mock_run_server),
+        ):
+            result = runner.invoke(main, ["proxy"], catch_exceptions=False)
+
+        assert result.exit_code == 0, result.output
+        assert monitor_calls == ["start", "stop", "summary"]
+
     def test_headroom_host_from_env(self, runner):
         """HEADROOM_HOST env var should be passed to ProxyConfig."""
         captured_config = {}

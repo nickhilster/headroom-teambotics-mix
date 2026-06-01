@@ -1,0 +1,42 @@
+<h2>Who is the primary new user we're designing for?</h2>
+<p class="subtitle">The onboarding flow should be optimized for one persona first.</p>
+
+<div class="options">
+  <div class="option" data-choice="app-dev" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>App Developer</h3>
+      <p>Building an LLM-powered product (chatbot, RAG pipeline, agent). Arrives via PyPI or npm. Wants to drop Headroom into their existing stack with minimal friction. Success = compression in their app's code path.</p>
+      <div class="pros-cons" style="margin-top:0.75rem">
+        <div class="pros"><h4>Their first question</h4><ul><li>"How do I call this from my code?"</li><li>"Will it break my message format?"</li></ul></div>
+        <div class="cons"><h4>Their blocker</h4><ul><li>Picking the right integration pattern</li><li>Understanding TS proxy requirement</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="agent-user" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>AI Power User</h3>
+      <p>Uses Claude Code, Codex, or Cursor heavily every day. Not building an app — wants cheaper, faster agent sessions. Arrives via README or word of mouth. Success = <code>headroom wrap claude</code> just works.</p>
+      <div class="pros-cons" style="margin-top:0.75rem">
+        <div class="pros"><h4>Their first question</h4><ul><li>"Will this slow down my agent?"</li><li>"How do I see my savings?"</li></ul></div>
+        <div class="cons"><h4>Their blocker</h4><ul><li>Trust (will it mess with my sessions?)</li><li>Visibility into what it's doing</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="both" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Both — separate paths</h3>
+      <p>The onboarding should detect or ask which mode the user needs and branch early. App devs go to library/proxy docs; power users go to wrap/install flow.</p>
+      <div class="pros-cons" style="margin-top:0.75rem">
+        <div class="pros"><h4>Benefit</h4><ul><li>No one reads irrelevant content</li><li>Each path can be tight and focused</li></ul></div>
+        <div class="cons"><h4>Cost</h4><ul><li>More content to maintain</li><li>Users may pick wrong path</li></ul></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<p class="subtitle" style="margin-top:1.5rem">Check http://localhost:57284 — click to select, then reply in terminal.</p>

@@ -1,7 +1,12 @@
 """Proxy server CLI commands."""
 
 import os
+from pathlib import Path
+import shutil
+import subprocess
 import sys
+import threading
+import webbrowser
 from typing import Any, Literal, cast
 
 import click
@@ -10,12 +15,203 @@ from headroom import paths as _paths
 from headroom.providers.registry import resolve_api_overrides, resolve_api_targets
 from headroom.proxy.modes import PROXY_MODE_TOKEN, normalize_proxy_mode
 
+from .wrap import _SessionOutputMonitor
 from .main import main
 
 _CONTEXT_TOOL_ENV = "HEADROOM_CONTEXT_TOOL"
 _CONTEXT_TOOL_RTK = "rtk"
 _CONTEXT_TOOL_LEAN_CTX = "lean-ctx"
 _VALID_CONTEXT_TOOLS = {_CONTEXT_TOOL_RTK, _CONTEXT_TOOL_LEAN_CTX}
+
+
+def _dashboard_url(host: str, port: int) -> str:
+    """Return a browser-safe dashboard URL for the running proxy."""
+    browser_host = host
+    if host in {"0.0.0.0", "::", "[::]"}:
+        browser_host = "127.0.0.1"
+    return f"http://{browser_host}:{port}/dashboard"
+
+
+def _schedule_dashboard_open(url: str) -> None:
+    """Open the dashboard shortly after startup so the server can bind first."""
+
+    def _open() -> None:
+        try:
+            webbrowser.open(url, new=2)
+        except Exception:
+            # Browser launch is convenience-only; startup must not fail.
+            pass
+
+    timer = threading.Timer(1.0, _open)
+    timer.daemon = True
+    timer.start()
+
+
+def _windows_known_folder(folder_id: str, fallback: Path) -> Path:
+    """Resolve a Windows known folder path with a filesystem fallback."""
+    if os.name != "nt":
+        raise click.ClickException("Windows launcher integration is only supported on Windows.")
+
+    try:
+        import ctypes
+        import uuid
+        from ctypes import wintypes
+
+        # SHGetKnownFolderPath takes REFKNOWNFOLDERID — a pointer to a 16-byte GUID
+        # struct in little-endian layout, not a wide-character string.
+        guid_bytes = uuid.UUID(folder_id).bytes_le
+        guid_buffer = (ctypes.c_byte * 16)(*guid_bytes)
+        path_ptr = wintypes.LPWSTR()
+        result = ctypes.windll.shell32.SHGetKnownFolderPath(  # type: ignore[attr-defined]
+            ctypes.byref(guid_buffer), 0, None, ctypes.byref(path_ptr)
+        )
+        if result == 0 and path_ptr.value:
+            resolved = Path(path_ptr.value)
+            # CoTaskMemFree needs the raw pointer, not the ctypes wrapper.
+            ctypes.windll.ole32.CoTaskMemFree(ctypes.cast(path_ptr, ctypes.c_void_p))  # type: ignore[attr-defined]
+            return resolved
+    except Exception:
+        pass
+
+    return fallback
+
+
+def _windows_desktop_dir() -> Path:
+    """Return the current user's Desktop path on Windows."""
+    return _windows_known_folder(
+        "{B4BFCC3A-DB2C-424C-B029-7FE99A87C641}",
+        Path.home() / "Desktop",
+    )
+
+
+def _windows_start_menu_dir() -> Path:
+    """Return the current user's Start Menu Programs folder on Windows."""
+    return _windows_known_folder(
+        "{A77F5D77-2E2B-44C3-A6A2-ABA601054A51}",
+        Path.home() / "AppData" / "Roaming" / "Microsoft" / "Windows" / "Start Menu" / "Programs",
+    ) / "Headroom"
+
+
+def _dashboard_launcher_dir() -> Path:
+    base_dir = os.environ.get("LOCALAPPDATA") or os.environ.get("APPDATA")
+    if base_dir:
+        return Path(base_dir) / "Headroom"
+    return Path.home() / ".headroom"
+
+
+def _powershell_quote(path: Path) -> str:
+    # Inside PowerShell double-quoted strings, `" is the escape for a literal "
+    return str(path).replace('"', '`"')
+
+
+def _powershell_literal(value: str) -> str:
+    return value.replace("'", "''")
+
+
+def _vbscript_literal(value: str) -> str:
+    return value.replace('"', '""')
+
+
+def _write_windows_dashboard_launcher(name: str, host: str, port: int) -> tuple[Path, Path]:
+    launcher_dir = _dashboard_launcher_dir()
+    launcher_dir.mkdir(parents=True, exist_ok=True)
+    script_path = launcher_dir / f"{name}.ps1"
+    wrapper_path = launcher_dir / f"{name}.vbs"
+    dashboard_url = _dashboard_url(host, port)
+    script_body = (
+        "$ErrorActionPreference = 'SilentlyContinue'\r\n"
+        f"$DashboardUrl = '{_powershell_literal(dashboard_url)}'\r\n"
+        f"$PythonExe = '{_powershell_literal(sys.executable)}'\r\n"
+        f"$DashboardArgs = @('-m', 'headroom.cli', 'dashboard', '--host', '{_powershell_literal(host)}', '--port', '{port}')\r\n"
+        "function Test-HeadroomDashboard {\r\n"
+        "    try {\r\n"
+        "        Invoke-WebRequest -Uri $DashboardUrl -Method Head -UseBasicParsing -TimeoutSec 2 | Out-Null\r\n"
+        "        return $true\r\n"
+        "    } catch {\r\n"
+        "        return $false\r\n"
+        "    }\r\n"
+        "}\r\n"
+        "if (-not (Test-HeadroomDashboard)) {\r\n"
+        "    Start-Process -FilePath $PythonExe -ArgumentList $DashboardArgs -WindowStyle Hidden | Out-Null\r\n"
+        "    for ($i = 0; $i -lt 40; $i++) {\r\n"
+        "        Start-Sleep -Milliseconds 500\r\n"
+        "        if (Test-HeadroomDashboard) {\r\n"
+        "            break\r\n"
+        "        }\r\n"
+        "    }\r\n"
+        "}\r\n"
+        "Start-Process $DashboardUrl | Out-Null\r\n"
+    )
+    wrapper_body = (
+        "Set shell = CreateObject(\"WScript.Shell\")\r\n"
+        f'shell.Run \"powershell -NoProfile -ExecutionPolicy Bypass -File \"\"{_vbscript_literal(str(script_path))}\"\"\", 0, False\r\n'
+    )
+    script_path.write_text(script_body, encoding="utf-8")
+    wrapper_path.write_text(wrapper_body, encoding="utf-8")
+    return script_path, wrapper_path
+
+
+def _create_windows_dashboard_shortcut(shortcut_path: Path, launcher_target: Path) -> None:
+    powershell = shutil.which("powershell") or shutil.which("pwsh")
+    if powershell is None:
+        raise click.ClickException("PowerShell is required to create a Windows desktop shortcut.")
+
+    shortcut_path.parent.mkdir(parents=True, exist_ok=True)
+    quoted_shortcut = _powershell_quote(shortcut_path)
+    quoted_target = _powershell_quote(launcher_target)
+    quoted_working_dir = _powershell_quote(launcher_target.parent)
+    command = (
+        "$WshShell = New-Object -ComObject WScript.Shell; "
+        f'$Shortcut = $WshShell.CreateShortcut("{quoted_shortcut}"); '
+        f'$Shortcut.TargetPath = "{quoted_target}"; '
+        f'$Shortcut.WorkingDirectory = "{quoted_working_dir}"; '
+        '$Shortcut.IconLocation = "$env:SystemRoot\\System32\\SHELL32.dll,220"; '
+        '$Shortcut.Description = "Launch the Headroom dashboard"; '
+        "$Shortcut.Save()"
+    )
+    subprocess.run(
+        [powershell, "-NoProfile", "-Command", command],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+
+def create_dashboard_shortcuts(
+    host: str,
+    port: int,
+    name: str = "Headroom Dashboard",
+    *,
+    include_desktop: bool = True,
+    include_start_menu: bool = True,
+) -> dict[str, Path]:
+    """Create hidden-launch dashboard entrypoints for Windows users."""
+    if os.name != "nt":
+        raise click.ClickException("Dashboard launchers are currently supported on Windows only.")
+
+    script_path, wrapper_path = _write_windows_dashboard_launcher(name, host, port)
+    created: dict[str, Path] = {
+        "launcher_script": script_path,
+        "launcher_wrapper": wrapper_path,
+    }
+
+    targets: list[tuple[str, Path]] = []
+    if include_desktop:
+        targets.append(("desktop", _windows_desktop_dir() / f"{name}.lnk"))
+    if include_start_menu:
+        targets.append(("start_menu", _windows_start_menu_dir() / f"{name}.lnk"))
+
+    for label, shortcut_path in targets:
+        try:
+            _create_windows_dashboard_shortcut(shortcut_path, wrapper_path)
+            created[label] = shortcut_path
+        except Exception:
+            fallback_path = shortcut_path.with_suffix(".vbs")
+            fallback_path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(wrapper_path, fallback_path)
+            created[f"{label}_fallback"] = fallback_path
+
+    return created
 
 
 def _get_env_bool(name: str, default: bool) -> bool:
@@ -432,6 +628,11 @@ def _selected_context_tool() -> str:
     "For containerized / read-only / load-balanced deployments. "
     "(env: HEADROOM_STATELESS=true)",
 )
+@click.option(
+    "--open-dashboard",
+    is_flag=True,
+    help="Open the local dashboard in your default browser after startup.",
+)
 @click.pass_context
 def proxy(
     ctx: click.Context,
@@ -487,6 +688,7 @@ def proxy(
     bedrock_profile: str | None,
     no_telemetry: bool,
     stateless: bool,
+    open_dashboard: bool,
 ) -> None:
     """Start the optimization proxy server.
 
@@ -693,6 +895,7 @@ def proxy(
     anthropic_url = provider_api_targets.anthropic
     openai_url = provider_api_targets.openai
     cloudcode_url = provider_api_targets.cloudcode
+    dashboard_url = _dashboard_url(config.host, config.port)
     backend_section = ""
 
     if config.backend == "anyllm" or config.backend.startswith("anyllm-"):
@@ -821,6 +1024,7 @@ Usage:
   Codex / OpenAI: OPENAI_BASE_URL=http://{config.host}:{config.port}/v1 your-app
 {memory_section}
 Endpoints:
+  GET  /dashboard  Local monitoring dashboard
   GET  /livez      Process liveness
   GET  /readyz     Traffic readiness
   GET  /health     Aggregate health
@@ -828,8 +1032,18 @@ Endpoints:
   GET  /stats-history Durable compression history + display session
   GET  /metrics    Prometheus metrics
 
+Dashboard:
+  {dashboard_url}
+
 Press Ctrl+C to stop.
 """)
+
+    if open_dashboard:
+        click.echo(f"Opening dashboard: {dashboard_url}")
+        _schedule_dashboard_open(dashboard_url)
+
+    session_monitor = _SessionOutputMonitor(port)
+    session_monitor.start()
 
     try:
         run_kwargs: dict[str, Any] = {}
@@ -844,3 +1058,108 @@ Press Ctrl+C to stop.
         run_server(config, **run_kwargs)
     except KeyboardInterrupt:
         click.echo("\nShutting down...")
+    finally:
+        session_monitor.stop()
+        session_monitor.emit_summary()
+
+
+@main.command()
+@click.option(
+    "--host",
+    default="127.0.0.1",
+    envvar="HEADROOM_HOST",
+    help="Host to bind to (default: 127.0.0.1, env: HEADROOM_HOST)",
+)
+@click.option(
+    "--port",
+    "-p",
+    default=8787,
+    type=int,
+    envvar="HEADROOM_PORT",
+    help="Port to bind to (default: 8787, env: HEADROOM_PORT)",
+)
+def dashboard(host: str, port: int) -> None:
+    """Start the proxy and open the local monitoring dashboard."""
+    try:
+        proxy.main(
+            args=["--host", host, "--port", str(port), "--open-dashboard"],
+            prog_name="headroom proxy",
+            standalone_mode=False,
+        )
+    except click.ClickException as exc:
+        exc.show()
+        raise SystemExit(exc.exit_code) from exc
+    except Exception as exc:
+        click.echo(f"Error: {exc}", err=True)
+        raise SystemExit(1) from exc
+
+
+@main.command("dashboard-shortcut")
+@click.option(
+    "--host",
+    default="127.0.0.1",
+    envvar="HEADROOM_HOST",
+    help="Host the launcher should bind to (default: 127.0.0.1, env: HEADROOM_HOST)",
+)
+@click.option(
+    "--port",
+    "-p",
+    default=8787,
+    type=int,
+    envvar="HEADROOM_PORT",
+    help="Port the launcher should use (default: 8787, env: HEADROOM_PORT)",
+)
+@click.option(
+    "--name",
+    default="Headroom Dashboard",
+    show_default=True,
+    help="Desktop shortcut name.",
+)
+@click.option(
+    "--desktop/--no-desktop",
+    default=True,
+    show_default=True,
+    help="Create a Desktop shortcut.",
+)
+@click.option(
+    "--start-menu/--no-start-menu",
+    default=True,
+    show_default=True,
+    help="Create a Start Menu shortcut.",
+)
+def dashboard_shortcut(
+    host: str,
+    port: int,
+    name: str,
+    desktop: bool,
+    start_menu: bool,
+) -> None:
+    """Create a clickable desktop shortcut for the Headroom dashboard."""
+    if os.name != "nt":
+        raise click.ClickException(
+            "`headroom dashboard-shortcut` is currently supported on Windows only."
+        )
+
+    if not desktop and not start_menu:
+        raise click.ClickException("Choose at least one launcher location.")
+
+    created = create_dashboard_shortcuts(
+        host,
+        port,
+        name=name,
+        include_desktop=desktop,
+        include_start_menu=start_menu,
+    )
+
+    if "desktop" in created:
+        click.echo(f"Created desktop shortcut: {created['desktop']}")
+    if "desktop_fallback" in created:
+        click.echo(f"Created desktop launcher fallback: {created['desktop_fallback']}")
+    if "start_menu" in created:
+        click.echo(f"Created Start Menu shortcut: {created['start_menu']}")
+    if "start_menu_fallback" in created:
+        click.echo(f"Created Start Menu launcher fallback: {created['start_menu_fallback']}")
+
+    click.echo(f"Launcher script: {created['launcher_script']}")
+    click.echo(f"Hidden launcher: {created['launcher_wrapper']}")
+    click.echo(f"Launch target: {_dashboard_url(host, port)}")

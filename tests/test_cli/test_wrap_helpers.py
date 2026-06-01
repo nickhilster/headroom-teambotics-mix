@@ -264,15 +264,34 @@ def test_run_proxy_only_watcher_calls_setup_lines_callback(
     fake_proc = _FakeProc()
 
     callback_calls: list[None] = []
+    monitor_calls: list[str] = []
+
+    class _FakeMonitor:
+        def __init__(self, port: int) -> None:
+            assert port == 8787
+
+        def start(self) -> None:
+            monitor_calls.append("start")
+
+        def stop(self) -> None:
+            monitor_calls.append("stop")
+
+        def emit_summary(self) -> None:
+            monitor_calls.append("summary")
 
     def fake_setup() -> None:
         callback_calls.append(None)
 
     monkeypatch.setattr(wrap_mod, "_ensure_proxy", lambda *a, **kw: fake_proc)
+    monkeypatch.setattr(wrap_mod, "_SessionOutputMonitor", _FakeMonitor)
     # Replace time.sleep with a no-op so the loop spins quickly.
     monkeypatch.setattr(wrap_mod.time, "sleep", lambda _s: None)
     # Replace _make_cleanup to avoid side-effects on real ports/files.
-    monkeypatch.setattr(wrap_mod, "_make_cleanup", lambda holder, port: lambda *a, **kw: None)
+    monkeypatch.setattr(
+        wrap_mod,
+        "_make_cleanup",
+        lambda holder, port, **kwargs: lambda *a, **kw: None,
+    )
     # Avoid touching real signal handlers in the test process.
     monkeypatch.setattr(wrap_mod.signal, "signal", lambda *a, **kw: None)
 
@@ -294,6 +313,7 @@ def test_run_proxy_only_watcher_calls_setup_lines_callback(
     # The watcher exits 1 when the proxy dies (our _FakeProc returns 0 on poll #2).
     assert inv.exit_code == 1
     assert callback_calls == [None]
+    assert monitor_calls == ["start", "stop", "summary"]
     # Banner is part of the helper's contract.
     assert "HEADROOM WRAP: CLINE" in inv.output
     # The "proxy exited unexpectedly" message is the documented exit branch.
@@ -318,7 +338,11 @@ def test_run_proxy_only_watcher_keyboardinterrupt_shuts_down_cleanly(
 
     monkeypatch.setattr(wrap_mod, "_ensure_proxy", lambda *a, **kw: _FakeProc())
     monkeypatch.setattr(wrap_mod.time, "sleep", raising_sleep)
-    monkeypatch.setattr(wrap_mod, "_make_cleanup", lambda holder, port: lambda *a, **kw: None)
+    monkeypatch.setattr(
+        wrap_mod,
+        "_make_cleanup",
+        lambda holder, port, **kwargs: lambda *a, **kw: None,
+    )
     monkeypatch.setattr(wrap_mod.signal, "signal", lambda *a, **kw: None)
 
     runner = CliRunner()
@@ -349,7 +373,11 @@ def test_run_proxy_only_watcher_unexpected_exception_returns_exit_1(
         raise RuntimeError("boom")
 
     monkeypatch.setattr(wrap_mod, "_ensure_proxy", boom)
-    monkeypatch.setattr(wrap_mod, "_make_cleanup", lambda holder, port: lambda *a, **kw: None)
+    monkeypatch.setattr(
+        wrap_mod,
+        "_make_cleanup",
+        lambda holder, port, **kwargs: lambda *a, **kw: None,
+    )
     monkeypatch.setattr(wrap_mod.signal, "signal", lambda *a, **kw: None)
 
     runner = CliRunner()
@@ -381,11 +409,29 @@ def test_run_proxy_only_watcher_calls_cleanup_on_finally(
     def fake_cleanup(*a: Any, **kw: Any) -> None:
         cleanup_calls["n"] += 1
 
+    class _FakeMonitor:
+        def __init__(self, port: int) -> None:
+            assert port == 8787
+
+        def start(self) -> None:
+            return None
+
+        def stop(self) -> None:
+            return None
+
+        def emit_summary(self) -> None:
+            return None
+
     def boom(*a: Any, **kw: Any) -> None:
         raise RuntimeError("boom")
 
     monkeypatch.setattr(wrap_mod, "_ensure_proxy", boom)
-    monkeypatch.setattr(wrap_mod, "_make_cleanup", lambda holder, port: fake_cleanup)
+    monkeypatch.setattr(wrap_mod, "_SessionOutputMonitor", _FakeMonitor)
+    monkeypatch.setattr(
+        wrap_mod,
+        "_make_cleanup",
+        lambda holder, port, **kwargs: fake_cleanup,
+    )
     monkeypatch.setattr(wrap_mod.signal, "signal", lambda *a, **kw: None)
 
     runner = CliRunner()
@@ -405,3 +451,43 @@ def test_run_proxy_only_watcher_calls_cleanup_on_finally(
     inv = runner.invoke(_cmd)
     assert inv.exit_code == 1
     assert cleanup_calls["n"] >= 1, "cleanup must run via the finally block"
+
+
+def test_build_first_compression_lines_formats_banner() -> None:
+    stats = {
+        "requests": {"total": 1},
+        "tokens": {"proxy_compression_saved": 16357},
+        "cost": {"compression_savings_usd": 0.0482},
+        "recent_requests": [
+            {
+                "input_tokens_original": 17765,
+                "input_tokens_optimized": 1408,
+                "tokens_saved": 16357,
+                "savings_percent": 92.1,
+                "transforms_applied": ["router:tool_result:smart_crusher", "cache_aligner"],
+            }
+        ],
+    }
+
+    lines = wrap_mod._build_first_compression_lines(stats, wrap_mod._session_baseline(None))
+
+    assert lines is not None
+    assert "First compression: 17,765 → 1,408 tokens  92% saved" in lines[1]
+    assert "Transforms: SmartCrusher · CacheAligner" in lines[2]
+    assert any("session total so far: $0.048" in line for line in lines)
+
+
+def test_build_session_summary_lines_uses_session_delta() -> None:
+    baseline = {"requests": 10, "tokens_saved": 1000, "cost_saved": 0.1}
+    stats = {
+        "requests": {"total": 34},
+        "tokens": {"proxy_compression_saved": 142230},
+        "cost": {"compression_savings_usd": 0.52},
+    }
+
+    lines = wrap_mod._build_session_summary_lines(stats, baseline)
+
+    assert "Compressions: 24" in lines[1]
+    assert "Tokens saved: 141,230" in lines[1]
+    assert "Cost saved: ≈ $0.42" in lines[1]
+    assert "headroom learn" in lines[2]

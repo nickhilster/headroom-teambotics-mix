@@ -1,0 +1,53 @@
+<h2>Design · Section 1: Quickstart page structure</h2>
+<p class="subtitle">The quickstart page gets restructured around a role selector. Everything below it adapts to the chosen track.</p>
+
+<div class="section">
+  <h3>Current structure (problem)</h3>
+  <div class="mockup">
+    <div class="mockup-header">quickstart.mdx — today</div>
+    <div class="mockup-body" style="font-size:0.82rem;line-height:1.8">
+      <b>1. Install</b> — pip / npm tabs<br>
+      <b>2. Compress messages</b> — code example (library API, complex message array)<br>
+      <b>3. Send to your LLM</b> — more code<br>
+      <b>4. Check your savings</b> — console.log output <span style="color:#f87171">(← aha moment, step 4)</span><br>
+      <span style="color:#94a3b8">— Alternative: proxy mode (buried at bottom)</span><br>
+      <span style="color:#f87171">→ Power user never sees wrap. App builder must parse proxy section. Both must read all 4 steps.</span>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>Proposed structure</h3>
+  <div class="mockup">
+    <div class="mockup-header">quickstart.mdx — proposed</div>
+    <div class="mockup-body" style="font-size:0.82rem;line-height:1.8">
+      <b style="color:#6ee7b7">↑ Above the fold: role selector</b><br>
+      &nbsp;&nbsp;[&nbsp;<b>I use Claude Code / Cursor / Codex</b>&nbsp;]&nbsp;&nbsp;&nbsp;[&nbsp;I'm building an app&nbsp;]<br><br>
+
+      <b>Track A — Agent User (3 steps, ~60 seconds)</b><br>
+      &nbsp;&nbsp;1. <code>pip install "headroom-ai[proxy]"</code><br>
+      &nbsp;&nbsp;2. <code>headroom wrap claude</code> &nbsp;<span style="color:#94a3b8">(auto-starts proxy, wires Claude)</span><br>
+      &nbsp;&nbsp;3. <span style="color:#6ee7b7">Inline savings appear in your terminal ← aha moment, step 3</span><br>
+      &nbsp;&nbsp;<span style="color:#94a3b8">→ Next: headroom learn · persistent install · cross-agent memory</span><br><br>
+
+      <b>Track B — App Builder (3 steps, ~90 seconds)</b><br>
+      &nbsp;&nbsp;1. <code>pip install headroom-ai</code> / <code>npm install headroom-ai</code><br>
+      &nbsp;&nbsp;2. <code>compress(messages, model="…")</code> — single function call, minimal example<br>
+      &nbsp;&nbsp;3. <span style="color:#6ee7b7">result.tokens_saved printed immediately ← aha moment, step 3</span><br>
+      &nbsp;&nbsp;<span style="color:#94a3b8">→ Next: proxy mode · SDK wrappers · LangChain · Vercel AI SDK</span>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>Key changes from today</h3>
+  <ul style="font-size:0.9rem;line-height:1.8">
+    <li>Role selector is <b>above the fold</b> — first thing seen, not a buried "Alternative" section</li>
+    <li>Aha moment moves from <b>step 4 → step 3</b> in both tracks</li>
+    <li>Power user path never sees library code; app builder path never sees wrap</li>
+    <li>Each track ends with a <b>focused "next steps"</b> pointing deeper into that persona's journey</li>
+    <li>Proxy mode stays prominent — it's step 2 of Track A, not an afterthought</li>
+  </ul>
+</div>
+
+<p class="subtitle">Does this structure look right? Reply in terminal — then we'll move to the CLI savings output design.</p>

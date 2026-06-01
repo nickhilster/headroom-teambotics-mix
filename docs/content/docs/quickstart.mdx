@@ -1,11 +1,74 @@
 ---
 title: Quickstart
-description: Get Headroom running in 5 minutes. Install, compress, and send to your LLM with fewer tokens.
+description: Choose the fastest Headroom path for agent sessions or app integrations.
 ---
 
-This guide gets you from zero to compressed LLM calls in under 5 minutes.
+Choose the track that matches why you showed up. Agent users can get to visible savings without writing code. App builders can get a `tokens_saved` result in one small `compress()` call.
 
-## 1. Install
+<Tabs
+  groupId="onboarding-track"
+  items={['Save tokens on my Claude Code / Cursor / Codex sessions', 'Add compression to my app']}
+>
+<Tab value="Save tokens on my Claude Code / Cursor / Codex sessions">
+
+Best for people running Claude Code, Cursor, or Codex directly and wanting the fastest path to lower token usage.
+
+## 1. Install the proxy bundle
+
+```bash
+pip install "headroom-ai[proxy]"
+```
+
+## 2. Wrap your agent
+
+```bash
+headroom wrap claude
+
+# Or another supported agent
+headroom wrap cursor
+headroom wrap codex
+```
+
+<Callout type="info" title="What wrap mode does">
+Headroom starts the local proxy for you, routes your agent traffic through it, and keeps later compressions silent so the agent output stays clean.
+</Callout>
+
+## 3. Watch the first savings show up in the terminal
+
+On the first saved-token request in the session, Headroom prints a one-time banner:
+
+```text
+━━━ Headroom ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+▶ First compression: 17,765 -> 1,408 tokens  92% saved
+  Transforms: SmartCrusher · CacheAligner
+  ≈ $0.048 saved · session total so far: $0.048
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+When the wrapped session exits, Headroom prints the session total and points you at the next high-value step:
+
+```text
+━━━ Headroom session summary ━━━━━━━━━━━━━━━━━━━━
+ Compressions: 24  ·  Tokens saved: 141,230  ·  Cost saved: ≈ $0.42
+ Run `headroom learn` to extract lessons from this session.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+## Next steps
+
+<Cards>
+  <Card title="Persistent Installs" href="/docs/persistent-installs" />
+  <Card title="Failure Learning" href="/docs/failure-learning" />
+  <Card title="Shared Context" href="/docs/shared-context" />
+  <Card title="Proxy Server" href="/docs/proxy" />
+</Cards>
+
+</Tab>
+<Tab value="Add compression to my app">
+
+Best for Python and TypeScript app builders who want to add compression inside an existing LLM workflow.
+
+## 1. Install the SDK
 
 <Tabs groupId="lang" items={['TypeScript', 'Python']}>
 <Tab value="TypeScript">
@@ -15,23 +78,21 @@ npm install headroom-ai
 </Tab>
 <Tab value="Python">
 ```bash
-pip install "headroom-ai[all]"
+pip install headroom-ai
 ```
 </Tab>
 </Tabs>
 
 <Callout type="info" title="TypeScript SDK requires the proxy">
-The TypeScript SDK sends messages to a local Headroom proxy for compression. Start the proxy before using the TS SDK:
+The TypeScript SDK sends messages to the local Headroom proxy for compression. Start it once before calling `compress()` from TypeScript:
 
 ```bash
 pip install "headroom-ai[proxy]"
 headroom proxy --port 8787
 ```
-
-The proxy runs the compression pipeline (Python) and exposes an HTTP API that the TS SDK calls.
 </Callout>
 
-## 2. Compress messages
+## 2. Call `compress()`
 
 <Tabs groupId="lang" items={['TypeScript', 'Python']}>
 <Tab value="TypeScript">
@@ -39,29 +100,17 @@ The proxy runs the compression pipeline (Python) and exposes an HTTP API that th
 import { compress } from 'headroom-ai';
 
 const messages = [
-  { role: 'system' as const, content: 'You analyze search results.' },
-  { role: 'user' as const, content: 'Search for Python tutorials.' },
+  { role: 'system' as const, content: 'You summarize noisy support tickets.' },
   {
-    role: 'assistant' as const,
-    content: null,
-    tool_calls: [{
-      id: 'call_1',
-      type: 'function' as const,
-      function: { name: 'search', arguments: '{"q": "python"}' },
-    }],
-  },
-  {
-    role: 'tool' as const,
-    tool_call_id: 'call_1',
+    role: 'user' as const,
     content: JSON.stringify({
-      results: Array.from({ length: 500 }, (_, i) => ({
-        title: `Result ${i}`,
-        snippet: `Description ${i}`,
-        score: 100 - i,
+      tickets: Array.from({ length: 300 }, (_, i) => ({
+        id: i + 1,
+        priority: i % 5 === 0 ? 'high' : 'normal',
+        detail: `Verbose support ticket payload ${i + 1}`,
       })),
     }),
   },
-  { role: 'user' as const, content: 'What are the top 3 results?' },
 ];
 
 const result = await compress(messages, {
@@ -76,28 +125,20 @@ from headroom import compress
 import json
 
 messages = [
-    {"role": "system", "content": "You analyze search results."},
-    {"role": "user", "content": "Search for Python tutorials."},
+    {"role": "system", "content": "You summarize noisy support tickets."},
     {
-        "role": "assistant",
-        "content": None,
-        "tool_calls": [{
-            "id": "call_1",
-            "type": "function",
-            "function": {"name": "search", "arguments": '{"q": "python"}'},
-        }],
-    },
-    {
-        "role": "tool",
-        "tool_call_id": "call_1",
+        "role": "user",
         "content": json.dumps({
-            "results": [
-                {"title": f"Result {i}", "snippet": f"Description {i}", "score": 100 - i}
-                for i in range(500)
+            "tickets": [
+                {
+                    "id": i + 1,
+                    "priority": "high" if i % 5 == 0 else "normal",
+                    "detail": f"Verbose support ticket payload {i + 1}",
+                }
+                for i in range(300)
             ]
         }),
     },
-    {"role": "user", "content": "What are the top 3 results?"},
 ]
 
 result = compress(messages, model="gpt-4o")
@@ -105,136 +146,65 @@ result = compress(messages, model="gpt-4o")
 </Tab>
 </Tabs>
 
-## 3. Send to your LLM
-
-Use the compressed messages exactly like the originals:
+## 3. Print the savings already returned by Headroom
 
 <Tabs groupId="lang" items={['TypeScript', 'Python']}>
 <Tab value="TypeScript">
-```ts twoslash
-import OpenAI from 'openai';
-
-const client = new OpenAI();
-
-// result.messages from the previous step
-const messages: any[] = [];
-
-const response = await client.chat.completions.create({
-  model: 'gpt-4o',
-  messages,
-});
-
-console.log(response.choices[0].message.content);
-```
-</Tab>
-<Tab value="Python">
-```python
-from openai import OpenAI
-
-client = OpenAI()
-response = client.chat.completions.create(
-    model="gpt-4o",
-    messages=result.messages,
-)
-
-print(response.choices[0].message.content)
-```
-</Tab>
-</Tabs>
-
-## 4. Check your savings
-
-<Tabs groupId="lang" items={['TypeScript', 'Python']}>
-<Tab value="TypeScript">
-```ts twoslash
-const result = {
-  tokensBefore: 45000,
-  tokensAfter: 4500,
-  tokensSaved: 40500,
-  compressionRatio: 0.9,
-  transformsApplied: ['smart_crusher', 'cache_aligner'],
-  messages: [],
-  ccrHashes: [],
-  compressed: true,
-};
-// ---cut---
+```ts
+console.log(`Tokens saved: ${result.tokensSaved}`);
 console.log(`Tokens before: ${result.tokensBefore}`);
-console.log(`Tokens after:  ${result.tokensAfter}`);
-console.log(`Tokens saved:  ${result.tokensSaved}`);
-console.log(`Compression:   ${(result.compressionRatio * 100).toFixed(0)}%`);
-console.log(`Transforms:    ${result.transformsApplied.join(', ')}`);
+console.log(`Tokens after: ${result.tokensAfter}`);
+console.log(`Compression: ${(result.compressionRatio * 100).toFixed(0)}%`);
 ```
 
 Example output:
 
 ```
+Tokens saved: 40500
 Tokens before: 45000
-Tokens after:  4500
-Tokens saved:  40500
-Compression:   90%
-Transforms:    smart_crusher, cache_aligner
+Tokens after: 4500
+Compression: 90%
 ```
 </Tab>
 <Tab value="Python">
 ```python
+print(f"Tokens saved:  {result.tokens_saved}")
 print(f"Tokens before: {result.tokens_before}")
 print(f"Tokens after:  {result.tokens_after}")
-print(f"Tokens saved:  {result.tokens_saved}")
 print(f"Compression:   {result.compression_ratio:.0%}")
-print(f"Transforms:    {result.transforms_applied}")
 ```
 
 Example output:
 
 ```
+Tokens saved:  40500
 Tokens before: 45000
 Tokens after:  4500
-Tokens saved:  40500
 Compression:   90%
-Transforms:    ['smart_crusher', 'cache_aligner']
 ```
 </Tab>
 </Tabs>
-
-## Alternative: proxy mode (zero code changes)
-
-If you do not want to change any code, run Headroom as a proxy and point your existing client at it:
-
-```bash
-# Start the proxy
-headroom proxy --port 8787
-
-# Point Claude Code at it
-ANTHROPIC_BASE_URL=http://localhost:8787 claude
-
-# Or any OpenAI-compatible client
-OPENAI_BASE_URL=http://localhost:8787/v1 your-app
-```
-
-All requests flow through Headroom automatically. Check savings at any time:
-
-```bash
-curl http://localhost:8787/stats
-# {"requests_total": 42, "tokens_saved_total": 125000, ...}
-```
-
-## What gets compressed
-
-The biggest savings come from tool outputs -- search results, database rows, log files, API responses. Headroom auto-detects the content type and routes it to the best compressor. No configuration needed.
-
-| Content type | Compressor | Typical savings |
-|---|---|---|
-| JSON arrays | SmartCrusher | 70--90% |
-| Source code | CodeCompressor | 40--70% |
-| Build/test logs | LogCompressor | 80--95% |
-| Search results | SearchCompressor | 60--80% |
-| Plain text | Kompress | 30--50% |
 
 ## Next steps
 
 <Cards>
-  <Card title="Installation" href="/docs/installation" />
   <Card title="Proxy Server" href="/docs/proxy" />
-  <Card title="How Compression Works" href="/docs/how-compression-works" />
-  <Card title="Configuration" href="/docs/configuration" />
+  <Card title="API Reference" href="/docs/api-reference" />
+  <Card title="LangChain" href="/docs/langchain" />
+  <Card title="Vercel AI SDK" href="/docs/vercel-ai-sdk" />
 </Cards>
+
+</Tab>
+</Tabs>
+
+## What gets compressed
+
+The biggest savings come from tool outputs, search results, logs, structured JSON, and other bulky context blocks. Headroom auto-detects the content type and routes it to the best compressor.
+
+| Content type | Compressor | Typical savings |
+|---|---|---|
+| JSON arrays | SmartCrusher | 70-90% |
+| Source code | CodeCompressor | 40-70% |
+| Build/test logs | LogCompressor | 80-95% |
+| Search results | SearchCompressor | 60-80% |
+| Plain text | Kompress | 30-50% |

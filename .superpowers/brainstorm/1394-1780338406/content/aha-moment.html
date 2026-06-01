@@ -1,0 +1,55 @@
+<h2>What should the "aha moment" look like?</h2>
+<p class="subtitle">Three strategies to move the value payoff earlier in the onboarding journey.</p>
+
+<div class="options">
+  <div class="option" data-choice="simulate" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Show savings before setup is complete</h3>
+      <p>Embed a live simulation in the quickstart docs and during <code>headroom init</code>. The user sees a before/after on a realistic example (search results, logs) <em>before</em> they've wired anything up. Builds confidence that it'll work for them.</p>
+      <div class="mockup" style="margin-top:0.75rem">
+        <div class="mockup-header">headroom init (terminal preview)</div>
+        <div class="mockup-body" style="font-family:monospace;font-size:0.82rem;line-height:1.7">
+          <span style="color:#6ee7b7">✓</span> Headroom installed<br>
+          <span style="color:#6ee7b7">✓</span> Preview: your last Claude Code session<br>
+          &nbsp;&nbsp;Before: <b>42,180 tokens</b> → After: <b>6,327 tokens</b> &nbsp;<span style="color:#6ee7b7;font-weight:bold">(-85%)</span><br>
+          <span style="color:#94a3b8">This was estimated from your transcript. Run headroom wrap claude to start saving for real.</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="instant" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Aggressive real-time feedback on first use</h3>
+      <p>The first time compression runs, surface a clear, prominent savings summary inline — not buried in <code>headroom stats</code>. The win is immediate and visible without any extra step.</p>
+      <div class="mockup" style="margin-top:0.75rem">
+        <div class="mockup-header">First compression call output</div>
+        <div class="mockup-body" style="font-family:monospace;font-size:0.82rem;line-height:1.7">
+          <span style="color:#6ee7b7">▶ Headroom</span> 17,765 → 1,408 tokens &nbsp;<span style="color:#6ee7b7;font-weight:bold">92% saved</span><br>
+          &nbsp;&nbsp;SmartCrusher · CacheAligner<br>
+          &nbsp;&nbsp;<span style="color:#94a3b8">≈ $0.048 saved this call · $2.14 saved today</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="collapse" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Collapse setup to one step</h3>
+      <p>Redesign the onboarding so the distance from "install" to "first compression" is a single command. The aha moment isn't moved earlier — setup is just made so fast that the delay disappears.</p>
+      <div class="mockup" style="margin-top:0.75rem">
+        <div class="mockup-header">Entire onboarding</div>
+        <div class="mockup-body" style="font-family:monospace;font-size:0.82rem;line-height:1.7">
+          <span style="color:#94a3b8">$ </span>pip install headroom-ai<br>
+          <span style="color:#94a3b8">$ </span>headroom wrap claude<br>
+          <span style="color:#6ee7b7">✓</span> Proxy running · Claude wired · Saving tokens now.
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<p class="subtitle" style="margin-top:1.5rem">http://localhost:57284 — click to select, then reply in terminal.</p>

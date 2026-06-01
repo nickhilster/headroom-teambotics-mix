@@ -666,6 +666,7 @@ def _run_init_targets(
     anyllm_provider: str | None,
     region: str | None,
     memory: bool,
+    dashboard_shortcuts: bool,
 ) -> None:
     logger.debug(
         "run_init_targets: targets=%s global_scope=%s port=%s backend=%s memory=%s",
@@ -703,6 +704,18 @@ def _run_init_targets(
     # touching the call sites.
     _install_headroom_mcp_for_targets(targets=targets, port=port)
 
+    if dashboard_shortcuts:
+        if os.name != "nt":
+            click.echo("Dashboard shortcut creation is currently supported on Windows only; skipping.")
+        else:
+            from .proxy import create_dashboard_shortcuts
+
+            created = create_dashboard_shortcuts("127.0.0.1", port)
+            if "desktop" in created:
+                click.echo(f"Desktop shortcut: {created['desktop']}")
+            if "start_menu" in created:
+                click.echo(f"Start Menu shortcut: {created['start_menu']}")
+
 
 def _install_headroom_mcp_for_targets(*, targets: list[str], port: int) -> None:
     """Install the headroom MCP server into each detected target agent."""
@@ -732,6 +745,12 @@ def _install_headroom_mcp_for_targets(*, targets: list[str], port: int) -> None:
 @click.option("--region", default=None, help="Cloud region for Bedrock / Vertex style backends.")
 @click.option("--memory", is_flag=True, help="Enable persistent memory in the proxy runtime.")
 @click.option(
+    "--dashboard-shortcuts/--no-dashboard-shortcuts",
+    default=True,
+    show_default=True,
+    help="Create Desktop and Start Menu launchers for the Headroom dashboard.",
+)
+@click.option(
     "-v",
     "--verbose",
     is_flag=True,
@@ -747,6 +766,7 @@ def init(
     anyllm_provider: str | None,
     region: str | None,
     memory: bool,
+    dashboard_shortcuts: bool,
     verbose: bool,
 ) -> None:
     """Install durable Headroom integrations for supported agents."""
@@ -771,6 +791,7 @@ def init(
             "anyllm_provider": anyllm_provider,
             "region": region,
             "memory": memory,
+            "dashboard_shortcuts": dashboard_shortcuts,
             "verbose": verbose,
         }
         return
@@ -788,6 +809,7 @@ def init(
         anyllm_provider=anyllm_provider,
         region=region,
         memory=memory,
+        dashboard_shortcuts=dashboard_shortcuts,
     )
 
 
@@ -807,6 +829,7 @@ def init_claude(ctx: click.Context) -> None:
         anyllm_provider=_ctx_value(ctx, "anyllm_provider"),
         region=_ctx_value(ctx, "region"),
         memory=bool(_ctx_value(ctx, "memory")),
+        dashboard_shortcuts=bool(_ctx_value(ctx, "dashboard_shortcuts")),
     )
 
 
@@ -822,6 +845,7 @@ def init_copilot(ctx: click.Context) -> None:
         anyllm_provider=_ctx_value(ctx, "anyllm_provider"),
         region=_ctx_value(ctx, "region"),
         memory=bool(_ctx_value(ctx, "memory")),
+        dashboard_shortcuts=bool(_ctx_value(ctx, "dashboard_shortcuts")),
     )
 
 
@@ -837,6 +861,7 @@ def init_codex(ctx: click.Context) -> None:
         anyllm_provider=_ctx_value(ctx, "anyllm_provider"),
         region=_ctx_value(ctx, "region"),
         memory=bool(_ctx_value(ctx, "memory")),
+        dashboard_shortcuts=bool(_ctx_value(ctx, "dashboard_shortcuts")),
     )
 
 
@@ -852,6 +877,7 @@ def init_openclaw(ctx: click.Context) -> None:
         anyllm_provider=_ctx_value(ctx, "anyllm_provider"),
         region=_ctx_value(ctx, "region"),
         memory=bool(_ctx_value(ctx, "memory")),
+        dashboard_shortcuts=bool(_ctx_value(ctx, "dashboard_shortcuts")),
     )
 
 
