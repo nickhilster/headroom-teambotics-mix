@@ -752,8 +752,39 @@ def parse_sse_events_from_byte_buffer(
 # Maximum message array length (prevents DoS from deeply nested payloads)
 MAX_MESSAGE_ARRAY_LENGTH = 10000
 
-# Compression pipeline timeout in seconds
-COMPRESSION_TIMEOUT_SECONDS = 30
+# Compression pipeline timeout in seconds.
+#
+# Operators can override this via HEADROOM_COMPRESSION_TIMEOUT_SECONDS
+# when running very large contexts. Invalid / non-positive values are
+# ignored and we fall back to the default.
+COMPRESSION_TIMEOUT_SECONDS_ENV = "HEADROOM_COMPRESSION_TIMEOUT_SECONDS"
+COMPRESSION_TIMEOUT_SECONDS_DEFAULT = 45.0
+
+
+def resolve_compression_timeout_seconds() -> float:
+    """Resolve compression timeout from env with safe fallback."""
+
+    raw = os.environ.get(COMPRESSION_TIMEOUT_SECONDS_ENV, "").strip()
+    if not raw:
+        return COMPRESSION_TIMEOUT_SECONDS_DEFAULT
+
+    try:
+        parsed = float(raw)
+        if parsed > 0:
+            return parsed
+    except ValueError:
+        pass
+
+    logger.warning(
+        "Ignoring invalid %s=%r; using default %.1f",
+        COMPRESSION_TIMEOUT_SECONDS_ENV,
+        raw,
+        COMPRESSION_TIMEOUT_SECONDS_DEFAULT,
+    )
+    return COMPRESSION_TIMEOUT_SECONDS_DEFAULT
+
+
+COMPRESSION_TIMEOUT_SECONDS = resolve_compression_timeout_seconds()
 
 # Maximum compression cache sessions (prevents unbounded memory growth)
 MAX_COMPRESSION_CACHE_SESSIONS = 500

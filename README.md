@@ -144,6 +144,32 @@ Reproduce: `python -m headroom.evals suite --tier 1` · [Full benchmarks & metho
 
 Any OpenAI-compatible client works via `headroom proxy`. MCP-native: `headroom mcp install`.
 
+## Codex 413 troubleshooting
+
+If Codex requests through the local proxy fail with `413` and `compression_refused`
+on `/v1/responses`, the compression stage likely timed out on a large payload.
+
+Quick mitigations:
+
+```bash
+# Increase compression timeout (default: 45 seconds)
+export HEADROOM_COMPRESSION_TIMEOUT_SECONDS=75
+
+# Optional emergency fallback: forward on compression failure
+# (can avoid 413, but may hit upstream context limits on very large payloads)
+export HEADROOM_WS_FAIL_OPEN_ON_COMPRESSION_FAILURE=1
+```
+
+For stricter control of the fail-open gate:
+
+```bash
+# Refuse oversize frames above this threshold after compression failure
+# (default: 262144 bytes)
+export HEADROOM_WS_COMPRESSION_FAIL_THRESHOLD_BYTES=393216
+```
+
+Then restart the proxy / wrapped agent process so env changes take effect.
+
 ## When to use · When to skip
 
 **Great fit if you…**

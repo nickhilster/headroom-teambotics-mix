@@ -53,6 +53,26 @@ curl https://api.openai.com/v1/models \
   -H "Authorization: Bearer $OPENAI_API_KEY"
 ```
 
+### Codex returns 413 compression_refused on /v1/responses
+
+**Symptom**: Codex calls through Headroom fail with `413 Payload Too Large` and
+`compression_refused`, often mentioning compression timeout.
+
+```bash
+# Increase compression timeout (default: 45 seconds)
+export HEADROOM_COMPRESSION_TIMEOUT_SECONDS=75
+
+# Optional emergency compatibility mode: fail open on compression failure
+# Warning: this can avoid the 413, but very large payloads may then fail upstream.
+export HEADROOM_WS_FAIL_OPEN_ON_COMPRESSION_FAILURE=1
+
+# Optional: tune oversize threshold for fail-closed decisions
+# Default is 262144 bytes (256 KiB)
+export HEADROOM_WS_COMPRESSION_FAIL_THRESHOLD_BYTES=393216
+```
+
+After changing env vars, restart the proxy or wrapped agent process.
+
 ## No Token Savings
 
 **Symptom**: `stats['session']['tokens_saved_total']` is 0.

@@ -22,10 +22,13 @@ from contextlib import contextmanager
 import pytest
 
 from headroom.proxy.helpers import (
+    COMPRESSION_TIMEOUT_SECONDS_DEFAULT,
+    COMPRESSION_TIMEOUT_SECONDS_ENV,
     WS_COMPRESSION_FAIL_OPEN_ENV,
     WS_COMPRESSION_OVERSIZE_BYTES_DEFAULT,
     WS_COMPRESSION_OVERSIZE_BYTES_ENV,
     decide_compression_failure_action,
+    resolve_compression_timeout_seconds,
 )
 
 
@@ -153,3 +156,20 @@ def test_threshold_zero_or_negative_ignored() -> None:
     # default threshold still applies
     assert action.refuse is True
     assert f"threshold={WS_COMPRESSION_OVERSIZE_BYTES_DEFAULT}" in action.reason
+
+
+def test_compression_timeout_env_parses_positive_values() -> None:
+    """Positive timeout env values override the default."""
+    with _env(**{COMPRESSION_TIMEOUT_SECONDS_ENV: "60"}):
+        timeout = resolve_compression_timeout_seconds()
+    assert timeout == 60.0
+
+
+@pytest.mark.parametrize("bad_value", ["0", "-5", "not-a-number"])
+def test_compression_timeout_env_invalid_values_fall_back_to_default(
+    bad_value: str,
+) -> None:
+    """Invalid / non-positive timeout env values must not break startup."""
+    with _env(**{COMPRESSION_TIMEOUT_SECONDS_ENV: bad_value}):
+        timeout = resolve_compression_timeout_seconds()
+    assert timeout == COMPRESSION_TIMEOUT_SECONDS_DEFAULT
